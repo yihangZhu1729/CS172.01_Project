@@ -51,13 +51,15 @@ class signatureDataset(Dataset):
 
             image_list = []
             for i in range(11,21):
-                files_Q = os.listdir('dataset/sigComp2011/testingSet/Questioned(487)/{}'.format('%3d'%i))
-                files_R = os.listdir('dataset/sigComp2011/testingSet/Ref(115)/{}'.format('%3d'%i))
+                files_Q = os.listdir('dataset/sigComp2011/testingSet/Questioned(487)/{}'.format('%03d'%i))
+                files_R = os.listdir('dataset/sigComp2011/testingSet/Ref(115)/{}'.format('%03d'%i))
                 i_list = list(itertools.product(files_Q,files_R))
                 image_list += i_list
             self.image_list = image_list
     
     def __getitem__(self, index):
+        image_1 = None
+        image_2 = None
         if self.dataType is Datatype.TRAIN:
             if index < NUM_FG_TRAIN:
                 i_F_index = index % 12
@@ -69,10 +71,10 @@ class signatureDataset(Dataset):
             else:
                 index -= NUM_FG_TRAIN
                 i_person = index // (NUM_G_TRAIN * (NUM_G_TRAIN - 1))
-                i_image = index % 10
+                i_image = index // 20
                 i_list = list(itertools.combinations([i for i in range(1,25)],2))
-                image_1 = r'dataset/sigComp2011/trainingSet/Offline Genuine/' + TRAIN_G_MAPPING[i_person] + '_' + i_list[i_image][0] + '.png'
-                image_2 = r'dataset/sigComp2011/trainingSet/Offline Genuine/' + TRAIN_G_MAPPING[i_person] + '_' + i_list[i_image][1] + '.png'
+                image_1 = r'dataset/sigComp2011/trainingSet/Offline Genuine/' + '%03d' % (i_person+1) + '_' + str(i_list[i_image][0]) + '.png'
+                image_2 = r'dataset/sigComp2011/trainingSet/Offline Genuine/' + '%03d' % (i_person+1) + '_' + str(i_list[i_image][1]) + '.png'
                 label = True
         else:
             num = 0
@@ -80,13 +82,12 @@ class signatureDataset(Dataset):
                 if index < TEST_MAPPING[i]:
                     num = 11 + i 
                     break
-            image_1 = 'dataset/sigComp2011/testingSet/Questioned(487)/{}/{}'.format('%3d'%num,self.image_list[index][0])
-            image_2 = 'dataset/sigComp2011/testingSet/Ref(115)/{}/{}'.format('%3d'%num,self.image_list[index][1])
-            label = 'G' in self.image_list[index][0]
+            image_1 = 'dataset/sigComp2011/testingSet/Questioned(487)/{}/{}'.format('%03d'%num,self.image_list[index][0])
+            image_2 = 'dataset/sigComp2011/testingSet/Ref(115)/{}/{}'.format('%03d'%num,self.image_list[index][1])
+            label = 1. if 'G' in self.image_list[index][0] else 0.
         
-        img_1 = cv2.resize((cv2.imread(image_1, 0)).astype(np.float32), (600, 1000))
-        img_2 = cv2.resize((cv2.imread(image_2, 0)).astype(np.float32), (600, 1000))
-        
+        img_1 = cv2.resize((cv2.imread(image_1, 0)).astype(np.float32), (1000, 600))
+        img_2 = cv2.resize((cv2.imread(image_2, 0)).astype(np.float32), (1000, 600))
         # when training, by a random factor, we inverse the image color
         if self.dataType is Datatype.TRAIN:
             if random.random() < 0.5:
@@ -97,7 +98,7 @@ class signatureDataset(Dataset):
         img_1 = np.array([img_1])
         img_2 = np.array([img_2])
 
-        sample = {'img1': img_1, 'img_2':img_2, 'label':label}
+        sample = {'img1': img_1, 'img2':img_2, 'label':label}
         return sample
     def __len__(self):
         return self.imgPairs
@@ -108,8 +109,7 @@ def getTrainingData(batch_size = 64):
     data_loader = DataLoader(dataSet, batch_size, shuffle = True, num_workers = 4, pin_memory = False)
     return data_loader
 
-
-def getTestingData(batch_size = 64):
+def getTestingData(batch_size = 1):
     dataSet = signatureDataset(dataPath = r'./dataset/sigComp2011/testingSet', dataType = Datatype.TEST)
     data_loader = DataLoader(dataSet, batch_size, shuffle = False, num_workers = 0, pin_memory = False)
     return data_loader
