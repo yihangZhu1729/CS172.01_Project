@@ -11,8 +11,8 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
 torch.backends.cudnn.benchmark = True
 learning_rate = 0.01
-max_epochs = 5
-train_batch = 8
+max_epochs = 1
+train_batch = 1
 thresh = 0.5
 
 
@@ -46,27 +46,55 @@ class model(nn.Module):
             nn.MaxPool2d(2, stride=2)
         )
 
-        self.attention = CBAM(self.out_channels)
+        self.mp1 = nn.MaxPool2d(4, stride=4)
+        self.mp2 = nn.MaxPool2d(2, stride=2)
+
+        self.attention1 = CBAM(self.out_channels)
+        self.attention2 = CBAM(self.out_channels)
+        self.attention3 = CBAM(self.out_channels)
+
+        self.classifier = nn.Sequential(
+            nn.Linear(self.out_channels*6, self.out_channels*6),
+            nn.ReLU(inplace=True),
+            nn.Linear(self.out_channels*6, self.out_channels*6),
+            nn.ReLU(inplace=True),
+            nn.Linear(self.out_channels*6, 1),
+            nn.Sigmoid()
+        )
 
     
-    def forward(self, x):           # 1 1000 600
-        x1 = self.conv1(x)           # 32 500 300
-        x1 = self.attention(x1)       
+    def forward(self, x, y): # x: ref, y: test
+        x1 = self.conv1(x)
+        # x1 = self.attention1(x1)
+        y1 = self.conv1(y)
+        # y1 = self.attention1(y1)
 
-        x2 = self.conv2(x1) 
-        x2 = self.attention(x2)
+        x2 = self.conv2(x1)
+        # x2 = self.attention2(x2)
+        y2 = self.conv2(y1)
+        # y2 = self.attention2(y2)
 
         x3 = self.conv3(x2)
-        x3 = self.attention(x3)
+        # x3 = self.attention3(x3)
+        y3 = self.conv3(y2)
+        # y3 = self.attention3(y3)
 
-        # global average pooling
-        x1 = torch.mean(x1.view(x1.size(0), x1.size(1), -1), dim=2)
-        x2 = torch.mean(x2.view(x2.size(0), x2.size(1), -1), dim=2)
-        x3 = torch.mean(x3.view(x3.size(0), x3.size(1), -1), dim=2)
+        x1 = self.mp1(x1)
+        y1 = self.mp1(y1)
+        x2 = self.mp2(x2)
+        y2 = self.mp2(y2)
 
-        x_out = torch.cat([x1,x2,x3], dim =1)        
+        cat_x = torch.cat([x1,x2,x3], dim=1)
+        cat_y = torch.cat([y1,y2,y3], dim=1)
 
-        return x_out
+        cat = torch.cat([cat_x, cat_y], dim=1)
+        # GAP
+        cat = torch.mean(cat.view(cat.size(0), cat.size(1), -1), dim=2)
+        out = self.classifier(cat)
+        # print("out:",out.item())
+        return out
+
+
 
 def signatureNet(**kwargs):
     return model()
@@ -80,6 +108,7 @@ def train():
     curr_lr = learning_rate
     total_step = len(train_loader)
     sigNet = signatureNet().to(device)
+    # lossFunc = nn.L1Loss().to(device)
     lossFunc = nn.BCELoss().to(device)
     optimizer = torch.optim.Adam(sigNet.parameters(), lr=curr_lr)
 
@@ -90,13 +119,9 @@ def train():
             img2 = img2.to(device)
             label = label.to(device)
 
-            print("idx", idx)
             # forward to calculate the values
-            out1 = sigNet(img1)
-            out2 = sigNet(img2)
+            result = sigNet(img1, img2)
 
-            similarity = torch.cosine_similarity(out1, out2)
-            result = torch.mul(similarity >= thresh,1).float().requires_grad_()
             label = label.float()
             loss = lossFunc(result, label)
 
@@ -114,32 +139,45 @@ def train():
             curr_lr /= 3
             update_lr(optimizer, curr_lr)
     
-    # torch.save(depthNet, "./results/model_{}".format(max_epochs))
+    torch.save(sigNet, "./results/model_{}".format(max_epochs))
 
 def test(model_idx):
     # Test the model
-    test_loader = getTestingData(batch_size = 2)
+    test_loader = getTestingData(batch_size = 1)
     model = torch.load("./results/model_{}".format(model_idx))
     model.eval()
     with torch.no_grad():
-        total_REL = 0
-        total_Mlog10E = 0
+        TP, TN, FP, FN = 0, 0, 0, 0
         for idx, sample in enumerate(test_loader):
-            rgb, depth = sample['rgb'], sample['depth']
-            rgb = rgb.to(device)
-            depth = depth.numpy()[0][0]
-            output = model(rgb)
-            output = output.data.cpu().numpy()[0][0] + 0.0001
+            if (idx) % 100 == 1:
+                print(idx)
+            img1, img2, label = sample['img1'], sample['img2'], sample['label']
+            img1 = img1.to(device)
+            img2 = img2.to(device)
+            label = label.to(device)
 
-            REL = np.mean(np.abs(depth - output) / depth)
-            Mlog10E = np.mean(np.abs(np.log10(depth)-np.log10(output)))
+            out = model(img1, img2)
+            predict = True if out > thresh else False
 
-            total_REL += REL
-            total_Mlog10E += Mlog10E
-
-        test_len = len(test_loader)
-        print('Average REL accuracy of the model on the test images: {} '.format(total_REL / test_len))
-        print('Average log1oE accuracy of the model on the test images: {} '.format(total_Mlog10E / test_len))
+            if predict == False and label == True:
+                FN += 1
+            elif predict == False and label == False:
+                FP += 1
+            elif predict == True and label == True:
+                TP += 1
+            elif predict == True and label == False:
+                TN += 1
+        
+        total_cnt = len(test_loader)
+        print(TP,TN,FP,FN)
+        recall = TP/(TP+FN)
+        precision = TP/(TP+FP)
+        f1 = (2*precision*recall) / (precision+recall)
+        print('Accuracy of the model on the test images: {} '.format((TP+TN)/total_cnt))
+        print('Recall of the model on the test images: {} '.format(recall))
+        print('Precision of the model on the test images: {} '.format(precision))
+        print('F1 score of the model on the test images: {} '.format(f1))
 
 if __name__ == '__main__':
     train()
+    test(1)

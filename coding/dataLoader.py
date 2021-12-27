@@ -10,12 +10,12 @@ import random
 
 NUM_F_TRAIN = 12
 NUM_G_TRAIN = 24
-NUM_FG_TRAIN = NUM_G_TRAIN * NUM_F_TRAIN * 29
-NUM_GG_TRAIN = NUM_G_TRAIN * (NUM_G_TRAIN - 1) * 10
+NUM_FG_TRAIN = NUM_G_TRAIN * NUM_F_TRAIN * 20
+NUM_GG_TRAIN = NUM_G_TRAIN * NUM_G_TRAIN  * 10
 TRAIN_G_MAPPING = ['0100','0101','0103','0104','0108','0109','0110','0111','0112','0113','0114','0116']
-TRAIN_F_MAPPING = ['0100003','0101004','0103002','0104006','0108008','0109001','0109002','0109003','0109004','0109005','0109006','0109007',
-                '0110005','0110009','0111010','0112004','0112010','0113001','0113003','0113005','0113006','0113007','0113009','0114008',
-                '0116001','0116002','0116007','0116008','0116009']
+TRAIN_F_MAPPING = ['0100003','0101004','0103002','0104006','0108008','0109005',
+                '0110005','0111010','0112004','0112010','0113001','0113003','0113006','0113007','0113009','0114008',
+                '0116001','0116002','0116007','0116009']
 TEST_MAPPING = [576,1152,1612,2176,2752,3328,3977,4553,5081,5551]
 
 
@@ -36,18 +36,7 @@ class signatureDataset(Dataset):
             self.imgPairs = NUM_GG_TRAIN + NUM_FG_TRAIN
         
         if dataType is Datatype.TEST:
-            num = 0
-            for i in range(11, 21):
-                index = '%03d' % i
-                path1 = self.dataPath + 'Ref(115)/{}/*.PNG'.format(index)                
-                path2_F = self.dataPath + 'Questioned(487)/{}/*.PNG'.format(index)
-                path2_G = self.dataPath + 'Questioned(487)/{}/*.png'.format(index)
-                len_ref = len(glob.glob(pathname=path1))
-                len_F = len(glob.glob(pathname=path2_F))
-                len_G = len(glob.glob(pathname=path2_G))
-                len_question = len_F + len_G
-                num += len_ref * len_question
-            self.imgPairs = num
+            self.imgPairs = 5551
 
             image_list = []
             for i in range(11,21):
@@ -63,16 +52,16 @@ class signatureDataset(Dataset):
         if self.dataType is Datatype.TRAIN:
             if index < NUM_FG_TRAIN:
                 i_F_index = index % 12
-                i_F = (index // 12) % 29
-                i_G_index = (index // (12 * 29)) % 24
+                i_F = (index // 12) % 20
+                i_G_index = (index // (12 * 20)) % 24
                 image_1 = r'dataset/sigComp2011/trainingSet/Offline Forgeries/' + TRAIN_F_MAPPING[i_F] + '_' + str(i_F_index+1) + '.png'
                 image_2 = r'dataset/sigComp2011/trainingSet/Offline Genuine/' + TRAIN_F_MAPPING[i_F][-3:] + '_' + str(i_G_index+1) + '.png'
                 label = False
             else:
                 index -= NUM_FG_TRAIN
-                i_person = index // (NUM_G_TRAIN * (NUM_G_TRAIN - 1))
+                i_person = index // (NUM_G_TRAIN * NUM_G_TRAIN )
                 i_image = index // 20
-                i_list = list(itertools.combinations([i for i in range(1,25)],2))
+                i_list = list(itertools.product([i for i in range(1,25)],[i for i in range(1,25)]))
                 image_1 = r'dataset/sigComp2011/trainingSet/Offline Genuine/' + '%03d' % (i_person+1) + '_' + str(i_list[i_image][0]) + '.png'
                 image_2 = r'dataset/sigComp2011/trainingSet/Offline Genuine/' + '%03d' % (i_person+1) + '_' + str(i_list[i_image][1]) + '.png'
                 label = True
@@ -86,8 +75,8 @@ class signatureDataset(Dataset):
             image_2 = 'dataset/sigComp2011/testingSet/Ref(115)/{}/{}'.format('%03d'%num,self.image_list[index][1])
             label = 1. if 'G' in self.image_list[index][0] else 0.
         
-        img_1 = cv2.resize((cv2.imread(image_1, 0)).astype(np.float32), (1000, 600))
-        img_2 = cv2.resize((cv2.imread(image_2, 0)).astype(np.float32), (1000, 600))
+        img_1 = cv2.resize((cv2.imread(image_1, 0)).astype(np.float32), (320, 160))
+        img_2 = cv2.resize((cv2.imread(image_2, 0)).astype(np.float32), (320, 160))
         # when training, by a random factor, we inverse the image color
         if self.dataType is Datatype.TRAIN:
             if random.random() < 0.5:
@@ -106,7 +95,7 @@ class signatureDataset(Dataset):
 
 def getTrainingData(batch_size = 64):
     dataSet = signatureDataset(dataPath = r'./dataset/sigComp2011/trainingSet', dataType = Datatype.TRAIN)
-    data_loader = DataLoader(dataSet, batch_size, shuffle = True, num_workers = 4, pin_memory = False)
+    data_loader = DataLoader(dataSet, batch_size, shuffle = True, num_workers = 0, pin_memory = False)
     return data_loader
 
 def getTestingData(batch_size = 1):
