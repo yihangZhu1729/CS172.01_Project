@@ -29,10 +29,7 @@ class signatureDataset(Dataset):
         self.dataType = dataType
 
         if dataType is Datatype.TRAIN:
-            # path_forgery = self.dataPath + '/Offline Forgeries/*.png'
             path2_genuine = self.dataPath + '/Offline Genuine/*.png'
-            # 12 png for 1 fake signature, 24 png for 1 genuine signature
-            # num = len(glob.glob(pathname=path2_genuine)) / NUM_G_TRAIN # 10
             self.imgPairs = NUM_GG_TRAIN + NUM_FG_TRAIN
         
         if dataType is Datatype.TEST:
