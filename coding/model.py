@@ -65,19 +65,19 @@ class model(nn.Module):
     
     def forward(self, x, y): # x: ref, y: test
         x1 = self.conv1(x)
-        # x1 = self.attention1(x1)
+        x1 = self.attention1(x1)
         y1 = self.conv1(y)
-        # y1 = self.attention1(y1)
+        y1 = self.attention1(y1)
 
         x2 = self.conv2(x1)
-        # x2 = self.attention2(x2)
+        x2 = self.attention2(x2)
         y2 = self.conv2(y1)
-        # y2 = self.attention2(y2)
+        y2 = self.attention2(y2)
 
         x3 = self.conv3(x2)
-        # x3 = self.attention3(x3)
+        x3 = self.attention3(x3)
         y3 = self.conv3(y2)
-        # y3 = self.attention3(y3)
+        y3 = self.attention3(y3)
 
         x1 = self.mp1(x1)
         y1 = self.mp1(y1)
@@ -91,7 +91,6 @@ class model(nn.Module):
         # GAP
         cat = torch.mean(cat.view(cat.size(0), cat.size(1), -1), dim=2)
         out = self.classifier(cat)
-        # print("out:",out.item())
         return out
 
 
@@ -108,8 +107,7 @@ def train():
     curr_lr = learning_rate
     total_step = len(train_loader)
     sigNet = signatureNet().to(device)
-    # lossFunc = nn.L1Loss().to(device)
-    lossFunc = nn.BCELoss().to(device)
+    lossFunc = nn.L1Loss().to(device)
     optimizer = torch.optim.Adam(sigNet.parameters(), lr=curr_lr)
 
     for epoch in range(max_epochs):
@@ -169,11 +167,9 @@ def test(model_idx):
                 TN += 1
         
         total_cnt = len(test_loader)
-        print(TP,TN,FP,FN)
         recall = TP/(TP+FN)
         precision = TP/(TP+FP)
         f1 = (2*precision*recall) / (precision+recall)
-        print('Accuracy of the model on the test images: {} '.format((TP+TN)/total_cnt))
         print('Recall of the model on the test images: {} '.format(recall))
         print('Precision of the model on the test images: {} '.format(precision))
         print('F1 score of the model on the test images: {} '.format(f1))
