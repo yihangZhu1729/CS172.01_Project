@@ -112,10 +112,6 @@ def center(image_dir):
     new_img = img[up:down,left:right]
 
     return new_img
-    # cv2.imshow("new_img", new_img)
-
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
 
 if __name__ == '__main__': 
     nparray = center('0109002_4.png')
